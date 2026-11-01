@@ -3,6 +3,8 @@ import createHttpError from "http-errors";
 import type { Prisma } from "../../generated/prisma/client.ts";
 import prisma from "../../prisma/client.ts";
 import { userSelect } from "./auth.controller.ts";
+import { uploadImage } from "../services/cloudinary.ts";
+import logger from "../logger.ts";
 import type {
   AnnouncementParams,
   CreateAnnouncementBody,
@@ -28,6 +30,21 @@ const findOwnAnnouncement = async (id: number, userId: number) => {
   }
 
   return announcement;
+};
+
+const uploadAnnouncementImage = async (
+  file: Express.Multer.File | undefined,
+  userId: number,
+) => {
+  if (!file) return undefined;
+
+  const imageUrl = await uploadImage(file.path);
+  logger.info(
+    { userId, imageUrl, size: file.size, mimetype: file.mimetype },
+    "Announcement image uploaded to Cloudinary",
+  );
+
+  return imageUrl;
 };
 
 export const getAllAnnouncements = async (
@@ -88,6 +105,9 @@ export const createAnnouncement = async (
   res: Response,
 ) => {
   const { title, description, price, category } = req.body;
+  const userId = Number(req.user!.sub);
+
+  const imageUrl = await uploadAnnouncementImage(req.file, userId);
 
   const announcement = await prisma.announcement.create({
     data: {
@@ -95,12 +115,18 @@ export const createAnnouncement = async (
       description,
       price,
       category,
+      imageUrl,
       user: {
-        connect: { id: Number(req.user!.sub) },
+        connect: { id: userId },
       },
     },
     include: includeUser,
   });
+
+  logger.info(
+    { announcementId: announcement.id, userId, hasImage: Boolean(imageUrl) },
+    "Announcement created",
+  );
 
   res.status(201).json(announcement);
 };
@@ -110,16 +136,24 @@ export const updateAnnouncement = async (
   res: Response,
 ) => {
   const { id } = req.params;
+  const userId = Number(req.user!.sub);
 
-  await findOwnAnnouncement(id, Number(req.user!.sub));
+  if (Object.keys(req.body).length === 0 && !req.file) {
+    throw createHttpError(422, "At least one field or image must be provided");
+  }
+
+  await findOwnAnnouncement(id, userId);
 
   const { title, description, price, category } = req.body;
+  const imageUrl = await uploadAnnouncementImage(req.file, userId);
 
   const updated = await prisma.announcement.update({
     where: { id },
-    data: { title, description, price, category },
+    data: { title, description, price, category, imageUrl },
     include: includeUser,
   });
+
+  logger.info({ announcementId: id, userId }, "Announcement updated");
 
   res.status(200).json(updated);
 };

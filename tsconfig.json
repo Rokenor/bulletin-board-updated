@@ -4,7 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -15,5 +15,5 @@
     "allowImportingTsExtensions": true,
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "reference"]
 }

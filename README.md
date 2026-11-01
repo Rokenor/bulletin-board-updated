@@ -23,6 +23,18 @@ REST API для дошки оголошень з JWT-автентифікаці�
 | @asteasolutions/zod-to-openapi | Генерація OpenAPI документації  |
 | swagger-ui-express             | Swagger UI                      |
 | dotenv                         | Змінні середовища               |
+| helmet, cors                   | Безпечні заголовки, CORS        |
+| express-rate-limit             | Rate limiting auth-маршрутів    |
+| pino, pino-http                | Логування                       |
+| multer, cloudinary             | Завантаження та зберігання фото |
+| Vitest, supertest              | Тестування                      |
+
+## Безпека та логування
+
+- **Helmet** — безпечні HTTP-заголовки для всіх маршрутів.
+- **CORS** — дозволені лише origins зі змінної `ALLOWED_ORIGINS` (через кому). Запит з іншого origin отримує `403`. Запити без заголовка `Origin` (curl, server-to-server) пропускаються.
+- **Rate limiting** — на всі `/auth/*` маршрути: не більше 10 запитів з однієї IP за 15 хвилин, далі `429 {"error": "Too many requests, please try again later"}`.
+- **pino** — логер у `src/logger.ts`; кожен HTTP-запит логується через `pino-http`; у контролерах логуються реєстрація, вхід/вихід, створення/оновлення оголошення, завантаження фото. У `production` — JSON-логи, в розробці — `pino-pretty`, у тестах — вимкнено.
 
 ## Встановлення
 
@@ -43,6 +55,10 @@ cp .env.example .env
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5432/announcements?schema=public
 JWT_SECRET=your-secret-key-at-least-256-bits-long
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
 4. Застосуйте міграцію:
@@ -106,8 +122,18 @@ npm run dev
 | `description` | рядок, обов'язковий, мінімум 10 символів               |
 | `price`       | число, обов'язкове, > 0                                |
 | `category`    | рядок, обов'язковий: `sale`, `service`, `job`, `other` |
+| `image`       | файл, опціональний: зображення (`image/*`), до 5 МБ    |
 
-PATCH використовує ті ж правила валідації, але всі поля опціональні (хоча б одне має бути присутнє).
+`POST /announcements` і `PATCH /announcements/:id` приймають `multipart/form-data` (JSON теж підтримується, якщо фото не потрібне). Multer тимчасово зберігає файл у `uploads/`, далі він завантажується в Cloudinary (папка `announcements`), а локальний файл видаляється. У БД зберігається лише URL (`imageUrl`, опціональне поле).
+
+PATCH використовує ті ж правила валідації, але всі поля опціональні (хоча б одне поле або фото має бути присутнє).
+
+```bash
+curl -X POST http://localhost:3000/announcements \
+  -H "Authorization: Bearer <accessToken>" \
+  -F title="Продам велосипед" -F description="Trek у відмінному стані, розмір рами L" \
+  -F price=8500 -F category=sale -F image=@bike.jpg
+```
 
 ## Структура проекту
 
@@ -123,6 +149,8 @@ boilerplate/
 │   │   └── announcements.controller.ts
 │   ├── middleware/
 │   │   ├── authenticate.ts
+│   │   ├── rateLimiter.ts
+│   │   ├── upload.ts
 │   │   └── validate.ts
 │   ├── routes/
 │   │   ├── auth.routes.ts
@@ -130,13 +158,22 @@ boilerplate/
 │   ├── validators/
 │   │   ├── auth.validator.ts
 │   │   └── announcements.validator.ts
+│   ├── services/
+│   │   ├── auth.ts
+│   │   └── cloudinary.ts
+│   ├── logger.ts
 │   └── openapi.ts
+├── tests/
+│   ├── auth.test.ts
+│   └── rateLimit.test.ts
+├── uploads/
 ├── app.ts
 ├── .env.example
 ├── .env
 ├── package.json
 ├── tsconfig.json
 ├── prisma.config.ts
+├── vitest.config.ts
 └── README.md
 ```
 
@@ -159,6 +196,15 @@ boilerplate/
 | `npm start`               | Запуск у виробничому режимі          |
 | `npm run prisma:migrate`  | Створення та застосування міграцій   |
 | `npm run prisma:generate` | Генерація Prisma Client              |
+| `npm test`                | Запуск тестів Vitest (watch-режим)   |
+| `npx vitest run`          | Одноразовий запуск тестів            |
+
+## Тести
+
+Тести не потребують запущеної БД — Prisma Client замокано через `vi.mock`.
+
+- `tests/auth.test.ts` — unit: генерація токенів, хешування паролів; integration (supertest): `POST /auth/register` → 201 / 422, `POST /auth/login` → 401 при невірному паролі; заголовки helmet, CORS (дозволений / заборонений origin).
+- `tests/rateLimit.test.ts` — 10 запитів до `/auth/login` проходять, 11-й → 429; не-auth маршрути не обмежуються.
 
 ## Документація API
 
@@ -170,7 +216,7 @@ Swagger UI доступний за адресою: http://localhost:3000/api-doc
 
 - `User` — `username` (унікальний), хешований `password`, `email` (унікальний), `name`, `createdAt`
 - `RefreshToken` — `token` (унікальний), зв'язок з `User`
-- `Announcement` — `title`, `description`, `price`, `category`, зв'язок з `User`, `createdAt`, `updatedAt`
+- `Announcement` — `title`, `description`, `price`, `category`, `imageUrl` (опціональний URL фото в Cloudinary), зв'язок з `User`, `createdAt`, `updatedAt`
 
 ## Ліцензія
 

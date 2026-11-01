@@ -3,6 +3,7 @@ import createHttpError from "http-errors";
 import type { Request, Response } from "express";
 import prisma from "../../prisma/client.ts";
 import { createTokens, verifyRefreshToken } from "../services/auth.ts";
+import logger from "../logger.ts";
 import type {
   RegisterBody,
   LoginBody,
@@ -29,6 +30,7 @@ export const register = async (
   });
 
   if (existingUser) {
+    logger.warn({ username, email }, "Registration rejected: user exists");
     throw createHttpError(409, "Username or email already taken");
   }
 
@@ -46,6 +48,11 @@ export const register = async (
 
   const tokens = await createTokens(user.id);
 
+  logger.info(
+    { userId: user.id, username: user.username },
+    "New user registered",
+  );
+
   res.status(201).json({ user, ...tokens });
 };
 
@@ -57,17 +64,21 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
   });
 
   if (!user) {
+    logger.warn({ username }, "Login failed: user not found");
     throw createHttpError(401, "Invalid credentials");
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
 
   if (!isPasswordValid) {
+    logger.warn({ userId: user.id, username }, "Login failed: wrong password");
     throw createHttpError(401, "Invalid credentials");
   }
 
   await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
   const tokens = await createTokens(user.id);
+
+  logger.info({ userId: user.id, username }, "User logged in");
 
   res.status(200).json({
     user: {
@@ -109,6 +120,8 @@ export const logout = async (req: Request, res: Response) => {
   await prisma.refreshToken.deleteMany({
     where: { userId: Number(req.user!.sub) },
   });
+
+  logger.info({ userId: Number(req.user!.sub) }, "User logged out");
 
   res.status(204).end();
 };

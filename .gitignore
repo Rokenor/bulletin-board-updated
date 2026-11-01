@@ -5,3 +5,7 @@ node_modules
 /generated/prisma
 *.db
 *.db-journal
+
+# Temporary multer uploads (files are removed after upload to Cloudinary)
+uploads/*
+!uploads/.gitkeep

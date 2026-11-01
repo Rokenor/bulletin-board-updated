@@ -1,5 +1,6 @@
 import express from "express";
 import authenticate from "../middleware/authenticate.ts";
+import { uploadImage } from "../middleware/upload.ts";
 import * as announcementsController from "../controllers/announcements.controller.ts";
 import {
   validateBody,
@@ -30,6 +31,7 @@ router.get(
 router.post(
   "/",
   authenticate,
+  uploadImage,
   validateBody(CreateAnnouncementSchema),
   announcementsController.createAnnouncement,
 );
@@ -37,6 +39,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
+  uploadImage,
   validateParams(AnnouncementParamsSchema),
   validateBody(UpdateAnnouncementSchema),
   announcementsController.updateAnnouncement,

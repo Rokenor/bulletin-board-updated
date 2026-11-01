@@ -16,17 +16,31 @@ export const CreateAnnouncementSchema = registry.register(
   z.object({
     title: z.string().min(5).max(50),
     description: z.string().min(10),
-    price: z.number().positive(),
+    // coerce: multipart/form-data sends all fields as strings
+    price: z.coerce.number().positive(),
     category: z.enum(CATEGORIES),
   }),
 );
 
 export const UpdateAnnouncementSchema = registry.register(
   "UpdateAnnouncement",
-  CreateAnnouncementSchema.partial().refine(
-    (data) => Object.keys(data).length > 0,
-    { error: "At least one field must be provided" },
-  ),
+  CreateAnnouncementSchema.partial(),
+);
+
+const ImageFileSchema = z.any().openapi({
+  type: "string",
+  format: "binary",
+  description: "Announcement photo (image/*, max 5 MB)",
+});
+
+const CreateAnnouncementFormSchema = registry.register(
+  "CreateAnnouncementForm",
+  CreateAnnouncementSchema.extend({ image: ImageFileSchema.optional() }),
+);
+
+const UpdateAnnouncementFormSchema = registry.register(
+  "UpdateAnnouncementForm",
+  UpdateAnnouncementSchema.extend({ image: ImageFileSchema.optional() }),
 );
 
 export const GetAnnouncementsQuerySchema = registry.register(
@@ -49,6 +63,7 @@ const AnnouncementSchema = registry.register(
   "Announcement",
   CreateAnnouncementSchema.extend({
     id: z.number().int(),
+    imageUrl: z.url().nullable(),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     user: UserSchema,
@@ -107,12 +122,12 @@ registry.registerPath({
   method: "post",
   path: "/announcements",
   tags: ["Announcements"],
-  summary: "Create announcement",
+  summary: "Create announcement (optionally with a photo)",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: {
-        "application/json": { schema: CreateAnnouncementSchema },
+        "multipart/form-data": { schema: CreateAnnouncementFormSchema },
       },
     },
   },
@@ -121,6 +136,7 @@ registry.registerPath({
       description: "Announcement created successfully",
       content: { "application/json": { schema: AnnouncementSchema } },
     },
+    400: { description: "Invalid file (not an image or too large)" },
     401: { description: "Authentication required" },
     422: { description: "Validation error" },
   },
@@ -130,13 +146,13 @@ registry.registerPath({
   method: "patch",
   path: "/announcements/{id}",
   tags: ["Announcements"],
-  summary: "Partially update own announcement",
+  summary: "Partially update own announcement (optionally replace photo)",
   security: [{ bearerAuth: [] }],
   request: {
     params: AnnouncementParamsSchema,
     body: {
       content: {
-        "application/json": { schema: UpdateAnnouncementSchema },
+        "multipart/form-data": { schema: UpdateAnnouncementFormSchema },
       },
     },
   },
@@ -145,6 +161,7 @@ registry.registerPath({
       description: "Announcement updated successfully",
       content: { "application/json": { schema: AnnouncementSchema } },
     },
+    400: { description: "Invalid file (not an image or too large)" },
     401: { description: "Authentication required" },
     403: { description: "Access denied" },
     404: { description: "Announcement not found" },

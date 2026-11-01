@@ -77,6 +77,7 @@ registry.registerPath({
     },
     409: { description: "Username or email already taken" },
     422: { description: "Validation error" },
+    429: { description: "Too many requests, please try again later" },
   },
 });
 
@@ -99,6 +100,7 @@ registry.registerPath({
     },
     401: { description: "Invalid credentials" },
     422: { description: "Validation error" },
+    429: { description: "Too many requests, please try again later" },
   },
 });
 
@@ -121,6 +123,7 @@ registry.registerPath({
     },
     401: { description: "Invalid or expired refresh token" },
     422: { description: "Validation error" },
+    429: { description: "Too many requests, please try again later" },
   },
 });
 
@@ -133,6 +136,7 @@ registry.registerPath({
   responses: {
     204: { description: "Logged out successfully" },
     401: { description: "Authentication required" },
+    429: { description: "Too many requests, please try again later" },
   },
 });
 
@@ -148,5 +152,6 @@ registry.registerPath({
       content: { "application/json": { schema: ProfileSchema } },
     },
     401: { description: "Authentication required" },
+    429: { description: "Too many requests, please try again later" },
   },
 });
